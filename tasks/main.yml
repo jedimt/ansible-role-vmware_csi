@@ -1,0 +1,181 @@
+---
+# tasks file for ansible-role-vmware-csi-deploy
+
+### This section pertains to the vSphere container storage plugin installation and configuration
+# List taints: kubectl describe nodes | egrep "Taints:|Name:"
+
+# Remove existing NoSchedule taint from the master node
+- name: Remove existing NoSchedule taint from multi-master nodes
+  ansible.builtin.command:
+    cmd: |
+      kubectl taint node {{ item }} node-role.kubernetes.io/master:NoSchedule-
+  register: taint_result
+  failed_when: taint_result.rc >= 2
+  with_items:
+    - "{{ groups.k8s_master }}"
+    - "{{ groups.k8s_control }}"
+  when: groups.k8s_control is defined
+  changed_when: true
+  tags: taint_nodes
+
+- name: Remove existing NoSchedule taint from single master node
+  ansible.builtin.shell:
+    cmd: |
+      kubectl taint node {{ item }} node-role.kubernetes.io/master:NoSchedule-
+  register: taint_result
+  failed_when: taint_result.rc >= 2
+  with_items:
+    - "{{ groups.k8s_master }}"
+  when: groups.k8s_control is not defined
+  changed_when: true
+  tags: taint_nodes
+
+# Taint the controller node(s)
+- name: Taint all nodes with NoSchedule
+  ansible.builtin.shell:
+    cmd: |
+      kubectl taint node "{{ item }}" node.cloudprovider.kubernetes.io/uninitialized=true:NoSchedule
+  loop: "{{ groups.k8s_short }}"
+  register: result
+  failed_when: result.rc >= 2
+  tags: taint_nodes
+
+- name: Check for pre-existing configmaps
+  ansible.builtin.stat:
+    path: ~/vsphere-cloud-controller-manager.yaml
+  register: ccm_manifest
+  tags:
+    - ccm
+
+- name: Remove pre-existing configmap
+  ansible.builtin.file:
+    path: ~/vsphere-cloud-controller-manager.yaml
+    state: absent
+  when: ccm_manifest.stat.exists
+  tags:
+    - ccm
+
+# Using a template here for simplicity, however this means this file
+# changes with each version of the cloud provider. The only difference
+# seems to be in the vsphere-cloud-controller-manager daemonset config:
+# v1.22:
+# image: gcr.io/cloud-provider-vsphere/cpi/release/manager:v1.22.5
+# v1.21:
+# image: gcr.io/cloud-provider-vsphere/cpi/release/manager:v1.21.1
+# TO-DO is to dynamically discover the version and populate the
+# ccm manifest dynamically.
+# 1.23 maps to CSI driver 2.5 (K8s versions 1.21 to 1.23)
+# 1.24 mapes to CSI driver 2.6 (K8s versions 1.22 to 1.24)
+- name: Create vsphere-cloud-controller-manager.yaml file
+  ansible.builtin.template:
+    src: vsphere-cloud-controller-manager_1.24.j2
+    dest: ~/vsphere-cloud-controller-manager.yaml
+    mode: '0644'
+  tags:
+    - ccm
+
+- name: Apply vSphere CCM manifest
+  ansible.builtin.command:
+    cmd: |
+      kubectl apply -f ~/vsphere-cloud-controller-manager.yaml
+  tags:
+    - ccm
+
+### This section pertains to installation of the VMware CSI driver itself
+
+# Create the vmware-system-csi namespace
+- name: Create namespace for VMware CSI driver
+  ansible.builtin.command:
+    cmd: |
+      kubectl apply -f {{ github_url_prefix }}/{{ csi_version }}/manifests/vanilla/namespace.yaml
+  register: csi_namespace_result
+  tags: csi_namespace
+
+# Create vSphere container storage plugin secret
+# Test if secrect is already applied (for idempotency)
+- name: Test for existing CPI secret
+  ansible.builtin.command:
+    cmd: |
+      kubectl get secret vsphere-config-secret -n vmware-system-csi
+  register: vmware_secret
+  # rc=0, file is found, rc=1, file is not found
+  failed_when: vmware_secret.rc >= 2
+  changed_when: false
+  tags: cpi_secret
+
+# Create CPI secret
+- name: Create vSphere CPI secret file
+  ansible.builtin.blockinfile:
+    path: /etc/kubernetes/csi-vsphere.conf
+    block: |
+      [Global]
+      cluster-id = "Nebulon"
+
+      [VirtualCenter "{{ vcenter_ip }}"]
+      insecure-flag = "true"
+      user = {{ vcenter_username }}
+      password = {{ vcenter_password }}
+      datacenters = {{ vcenter_datacenter }}
+    create: true
+    mode: '0644'
+  tags: cpi_secret
+  when: "'vsphere-config-secret' not in vmware_secret.stdout"
+
+# Apply the vSphere CPI secret
+- name: Apply vSphere CPI secret
+  ansible.builtin.shell:
+    cmd: |
+      kubectl create secret generic vsphere-config-secret \
+        --from-file=/etc/kubernetes/csi-vsphere.conf \
+        --namespace=vmware-system-csi
+  changed_when: true
+  tags: cpi_secret
+  when: "'vsphere-config-secret' not in vmware_secret.stdout"
+
+# Deploy the vSphere container storage plugin
+- name: Download the vSphere CSI driver manifest
+  ansible.builtin.command:
+    cmd: |
+      wget {{ github_url_prefix }}/{{ csi_version }}/manifests/vanilla/vsphere-csi-driver.yaml
+  tags: csi_modify
+
+# Set the number of master nodes. By default this is three
+# For single node masters, we need to change this
+
+- name: Set number of master nodes
+  ansible.builtin.lineinfile:
+    path: ~/vsphere-csi-driver.yaml
+    search_string: 'replicas: 3'
+    line: "  replicas: 1"
+  when: groups.k8s_control is not defined
+  tags: csi_modify
+
+# Deploy the CSI plugin
+- name: Deploy the vSphere container storage plugin
+  ansible.builtin.command:
+    cmd: |
+      kubectl apply -f ~/vsphere-csi-driver.yaml
+  tags: csi_apply
+
+# Create storage class
+- name: Create K8s StorageClass for VMware CSI
+  ansible.builtin.blockinfile:
+    path: ~/vsphere_storageclass.yml
+    block: |
+      kind: StorageClass
+      apiVersion: storage.k8s.io/v1
+      metadata:
+        name: {{ storage_class }}
+        annotations:
+          storageclass.kubernetes.io/is-default-class: "true"
+      provisioner: csi.vsphere.vmware.com
+    create: true
+    mode: '0644'
+  tags: csi_sc
+
+# Apply the storage class
+- name: Apply the StorageClass
+  ansible.builtin.command:
+    cmd: |
+      kubectl apply -f ~/vsphere_storageclass.yml
+  tags: csi_sc
