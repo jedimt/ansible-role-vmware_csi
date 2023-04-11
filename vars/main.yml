@@ -1,5 +1,5 @@
 ---
-# vars file for ansible-role-vmware-csi-deploy
+# vars file for jedimt.vmware_csi
 
 # CPI manifest URL prefixes
 github_url_prefix: "https://raw.githubusercontent.com/kubernetes-sigs/vsphere-csi-driver"

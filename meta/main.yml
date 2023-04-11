@@ -1,6 +1,6 @@
 galaxy_info:
   author: jedimt
-  role_name: vmware_csi_deploy
+  role_name: vmware_csi
   description: Deploys the VMware CSI driver
   company: Nebulon
 

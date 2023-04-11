@@ -50,7 +50,7 @@ Example Playbook
         - "../../credentials.yml"
 
       roles:
-        - { role: ansible-role-vmware-csi-deploy,
+        - { role: jedimt.vmware_csi,
             vcenter_ip: "10.100.24.31",
             vcenter_hostname: "devvcsa.tme.nebulon.com",
             vcenter_datacenter: "SC0"

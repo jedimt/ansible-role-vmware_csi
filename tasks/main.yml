@@ -1,5 +1,5 @@
 ---
-# tasks file for ansible-role-vmware-csi-deploy
+# tasks file for jedimt.vmware_csi
 
 ### This section pertains to the vSphere container storage plugin installation and configuration
 # List taints: kubectl describe nodes | egrep "Taints:|Name:"

@@ -1,5 +1,5 @@
 ---
-# defaults file for ansible-role-vmware-csi-deploy
+# defaults file for jedimt.vmware_csi
 
 # Storage Class name to use for CSI driver
 storage_class: "vmw-block-sc"
