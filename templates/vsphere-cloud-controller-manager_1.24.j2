@@ -18,8 +18,8 @@ metadata:
     component: cloud-controller-manager
   namespace: kube-system
 stringData:
-  {{ vcenter_ip }}.username: "{{ vcenter_username }}"
-  {{ vcenter_ip }}.password: "{{ vcenter_password }}"
+  {{ vcenter_ip_csi }}.username: "{{ vcenter_username_csi }}"
+  {{ vcenter_ip_csi }}.password: "{{ vcenter_password_csi }}"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -42,12 +42,12 @@ data:
 
     # vcenter section
     vcenter:
-      {{ vcenter_hostname }}:
-        server: {{ vcenter_ip }}
-        user: {{ vcenter_username }}
-        password: {{ vcenter_password }}
+      {{ vcenter_hostname_csi }}:
+        server: {{ vcenter_ip_csi }}
+        user: {{ vcenter_username_csi }}
+        password: {{ vcenter_password_csi }}
         datacenters:
-          - {{ vcenter_datacenter }}
+          - {{ vcenter_datacenter_csi }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
