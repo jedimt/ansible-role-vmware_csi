@@ -20,11 +20,11 @@ The following are default variables:
     csi_version: "v2.7.0"
 
     # vCenter information
-    vcenter_ip: 10.100.24.31
-    vcenter_hostname: devvcsa.tme.nebulon.com
-    vcenter_username: "{{ vault_vcenter_username }}"
-    vcenter_password: "{{ vault_vcenter_password }}"
-    vcenter_datacenter: "SC0"
+    vcenter_ip_csi: 10.100.24.31
+    vcenter_hostname_csi: devvcsa.tme.nebulon.com
+    vcenter_username_csi: "{{ vault_vcenter_username }}"
+    vcenter_password_csi: "{{ vault_vcenter_password }}"
+    vcenter_datacenter_csi: "SC0"
 
 Additionally there are two URL prefix variables defined in the vars/main.yml file.
 
@@ -48,12 +48,13 @@ Example Playbook
       vars_files:
         # Ansible vault with all required passwords
         - "../../credentials.yml"
-
       roles:
         - { role: jedimt.vmware_csi,
-            vcenter_ip: "10.100.24.31",
-            vcenter_hostname: "devvcsa.tme.nebulon.com",
-            vcenter_datacenter: "SC0"
+            vcenter_ip_csi: "10.100.24.31",
+            vcenter_hostname_csi: "devvcsa.tme.nebulon.com",
+            vcenter_datacenter_csi: "SC0",
+            vcenter_username_csi: "{{ vault_vcenter_username }}",
+            vcenter_password_csi: "{{ vault_vcenter_password }}"
         }
 
 License
